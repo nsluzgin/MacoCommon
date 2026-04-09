@@ -86,7 +86,10 @@ def configure_logging(log_level: str) -> None:
         for h in logger.handlers:
             h.setFormatter(formatter)
             h.addFilter(trace_filter)
-        # Keep propagation so filters/handlers on root apply consistently.
-        logger.propagate = True
+
+    # Uvicorn attaches handlers to these; with propagate=True (default) each record is also
+    # handled by ancestors (uvicorn → root), so access lines appear 3× and startup lines 2×.
+    logging.getLogger("uvicorn.access").propagate = False
+    logging.getLogger("uvicorn.error").propagate = False
 
     _configured = True
