@@ -6,7 +6,7 @@ from service_common.internal_error import (
     internal_server_error_response,
     log_error_code_with_stack,
 )
-from service_common.retry import retry_async
+from service_common.retry import retry_async, retry_sync
 from service_common.tracing import (
     TraceIdFilter,
     configure_logging,
@@ -27,5 +27,6 @@ __all__ = [
     "register_trace_id_middleware",
     "reset_trace_id",
     "retry_async",
+    "retry_sync",
     "set_trace_id",
 ]
