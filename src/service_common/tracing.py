@@ -6,6 +6,7 @@ import logging
 import re
 import sys
 from contextvars import ContextVar
+from typing import TextIO
 from uuid import UUID, uuid4
 
 TraceId = UUID
@@ -67,8 +68,12 @@ class TraceIdFilter(logging.Filter):
         return True
 
 
-def configure_logging(log_level: str) -> None:
-    """Configure logging format with optional trace_id context."""
+def configure_logging(log_level: str, *, stream: TextIO | None = None) -> None:
+    """Configure logging format with optional trace_id context.
+
+    If ``stream`` is set, the default root ``StreamHandler`` uses it (e.g. ``sys.stderr``
+    for CLI workers). Otherwise stdout is used.
+    """
     global _configured
     if _configured:
         return
@@ -82,7 +87,8 @@ def configure_logging(log_level: str) -> None:
 
     # Ensure there's at least one handler.
     if not root.handlers:
-        handler = logging.StreamHandler(sys.stdout)
+        out = stream if stream is not None else sys.stdout
+        handler = logging.StreamHandler(out)
         root.addHandler(handler)
 
     formatter = logging.Formatter(

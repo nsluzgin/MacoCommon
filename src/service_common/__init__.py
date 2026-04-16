@@ -12,6 +12,7 @@ from service_common.tracing import (
     configure_logging,
     get_trace_id,
     get_trace_id_str,
+    peek_trace_id,
     reset_trace_id,
     set_trace_id,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "configure_logging",
     "get_trace_id",
     "get_trace_id_str",
+    "peek_trace_id",
     "internal_server_error_response",
     "log_error_code_with_stack",
     "register_trace_id_middleware",
