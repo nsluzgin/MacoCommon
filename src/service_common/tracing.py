@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
+import re
 import sys
 from contextvars import ContextVar
-from typing import Final
 from uuid import UUID, uuid4
 
 TraceId = UUID
@@ -16,18 +16,33 @@ _trace_id_var: ContextVar[TraceId | None] = ContextVar(
 )
 
 _configured: bool = False
+_HEALTH_ACCESS_RE = re.compile(r"/health/(?:live|ready)")
 
-_DEFAULT_TRACE_ID_FALLBACK: Final[str] = "00000000-0000-0000-0000-000000000000"
+
+def peek_trace_id() -> TraceId | None:
+    """Return current trace_id without creating one."""
+    return _trace_id_var.get()
 
 
-def get_trace_id() -> TraceId:
-    """Return the current request trace_id, generating it if missing."""
+def get_or_create_trace_id() -> TraceId:
+    """Return the current trace_id, generating one when context is empty."""
     current = _trace_id_var.get()
     if current is not None:
         return current
     new_id = uuid4()
     _trace_id_var.set(new_id)
     return new_id
+
+
+def get_trace_id() -> TraceId:
+    """Backward-compatible alias for ``get_or_create_trace_id``."""
+    return get_or_create_trace_id()
+
+
+def get_trace_id_str() -> str:
+    """Return trace_id as string, or empty string when context is missing."""
+    trace_id = peek_trace_id()
+    return str(trace_id) if trace_id is not None else ""
 
 
 def set_trace_id(trace_id: TraceId) -> ContextVar.Token[TraceId | None]:
@@ -40,24 +55,20 @@ def reset_trace_id(token: ContextVar.Token[TraceId | None]) -> None:
     _trace_id_var.reset(token)
 
 
-def get_trace_id_str() -> str:
-    """Return trace_id formatted for logs."""
-    trace_id = _trace_id_var.get()
-    if trace_id is None:
-        return _DEFAULT_TRACE_ID_FALLBACK
-    return str(trace_id)
-
-
 class TraceIdFilter(logging.Filter):
-    """Inject trace_id into log records."""
+    """Inject optional trace attributes and suppress health endpoint access lines."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.trace_id = get_trace_id_str()
+        if record.name == "uvicorn.access" and _HEALTH_ACCESS_RE.search(record.getMessage()):
+            return False
+
+        trace_id = peek_trace_id()
+        record.trace_fragment = f" [trace_id: {trace_id}]" if trace_id is not None else ""
         return True
 
 
 def configure_logging(log_level: str) -> None:
-    """Configure logging format so every log message contains trace_id."""
+    """Configure logging format with optional trace_id context."""
     global _configured
     if _configured:
         return
@@ -75,7 +86,7 @@ def configure_logging(log_level: str) -> None:
         root.addHandler(handler)
 
     formatter = logging.Formatter(
-        fmt="[%(levelname)s][%(asctime)s] [trace_id: %(trace_id)s]: %(message)s",
+        fmt="[%(levelname)s][%(asctime)s]%(trace_fragment)s: %(message)s",
         datefmt="%d.%m.%Y %H:%M:%S",
     )
     trace_filter = TraceIdFilter()

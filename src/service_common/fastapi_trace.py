@@ -9,7 +9,22 @@ from fastapi import FastAPI
 from starlette.requests import Request
 from starlette.responses import Response
 
-from service_common.tracing import get_trace_id, reset_trace_id, set_trace_id
+from service_common.tracing import get_or_create_trace_id, reset_trace_id, set_trace_id
+
+_TRACE_ID_MAX_LEN = 64
+
+
+def _parse_trace_id_header(raw_value: str | None) -> UUID | None:
+    """Return parsed UUID for trusted header values."""
+    if raw_value is None:
+        return None
+    value = raw_value.strip()
+    if not value or len(value) > _TRACE_ID_MAX_LEN:
+        return None
+    try:
+        return UUID(value)
+    except ValueError:
+        return None
 
 
 def register_trace_id_middleware(app: FastAPI) -> None:
@@ -20,14 +35,9 @@ def register_trace_id_middleware(app: FastAPI) -> None:
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
-        header_value = request.headers.get("X-Trace-Id")
-        if header_value:
-            try:
-                trace_id = UUID(header_value)
-            except Exception:
-                trace_id = get_trace_id()
-        else:
-            trace_id = get_trace_id()
+        trace_id = _parse_trace_id_header(request.headers.get("X-Trace-Id"))
+        if trace_id is None:
+            trace_id = get_or_create_trace_id()
 
         token = set_trace_id(trace_id)
         try:
